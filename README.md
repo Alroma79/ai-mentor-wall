@@ -11,6 +11,7 @@ Real-time teamwork board for weekend hackathons. Builders post blockers, teammat
 2. Install dependencies: `npm install`
 3. Start the dev server: `npm run dev`
 4. Open `http://localhost:3000` and request a Supabase magic link to log in.
+5. (Optional) Seed demo data: `SUPABASE_SERVICE_ROLE_KEY=... npx ts-node --esm scripts/seed.ts`
 
 ## Database schema & policies
 

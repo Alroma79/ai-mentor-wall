@@ -21,9 +21,9 @@ ALGOLIA_INDEX=mentor_questions
 
 ## Database + RLS
 
-- Schema + policies live in `supabase/schema.sql`.
-- Tables: `questions` and `answers`, both with permissive RLS for demo use.
-- Do **not** run seeds today; apply the SQL tomorrow before going live.
+- Schema + policies live in `supabase/migrations/*`.
+- Tables: `profiles`, `posts`, and `replies`, each guarded by row-level security.
+- Realtime is enabled for `posts` and `replies` so the wall updates live.
 
 ## Dev scripts
 

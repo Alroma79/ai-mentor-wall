@@ -1,130 +1,302 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { insertQuestion, listQuestions } from "@/lib/db";
+import type { Session } from "@supabase/supabase-js";
+import AuthPanel from "@/components/auth-panel";
+import NewPostForm from "@/components/new-post-form";
+import PostThread, { OptimisticReply } from "@/components/post-thread";
+import { createPost, createReply, fetchWall } from "@/lib/db";
+import { supabase } from "@/lib/supabaseClient";
+import type { Reply, WallPost } from "@/lib/types";
 
-type QuestionItem =
-  Awaited<ReturnType<typeof listQuestions>>["data"] extends (infer U)[] | null
-    ? U
-    : never;
+type BusyMap = Record<string, boolean>;
 
 export default function Home() {
-  const [title, setTitle] = useState("");
-  const [details, setDetails] = useState("");
-  const [items, setItems] = useState<QuestionItem[] | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [wall, setWall] = useState<WallPost[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const load = async () => {
-    const { data, error } = await listQuestions();
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setItems(data);
-  };
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [replyBusy, setReplyBusy] = useState<BusyMap>({});
+  const [aiBusy, setAiBusy] = useState<BusyMap>({});
+  const [optimisticReplies, setOptimisticReplies] = useState<
+    Record<string, OptimisticReply | null>
+  >({});
 
   useEffect(() => {
-    void load();
+    const syncSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    };
+    void syncSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const ask = async () => {
-    if (!title.trim()) return;
-    setError(null);
-    setSubmitting(true);
+  useEffect(() => {
+    const loadWall = async () => {
+      setLoading(true);
+      const { data, error } = await fetchWall();
+      if (error) {
+        setError(error.message);
+      } else {
+        setWall(data ?? []);
+        setError(null);
+      }
+      setLoading(false);
+    };
+
+    void loadWall();
+  }, []);
+
+  useEffect(() => {
+    const postsChannel = supabase
+      .channel("public:posts")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "posts" },
+        (payload) => {
+          setWall((previous) => applyPostChange(previous, payload));
+        }
+      )
+      .subscribe();
+
+    const repliesChannel = supabase
+      .channel("public:replies")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "replies" },
+        (payload) => {
+          setWall((previous) => applyReplyChange(previous, payload));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(postsChannel);
+      supabase.removeChannel(repliesChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    setOptimisticReplies((current) => {
+      let mutated = false;
+      const next: Record<string, OptimisticReply | null> = { ...current };
+      for (const [postId, optimistic] of Object.entries(current)) {
+        if (!optimistic || optimistic.status !== "ready") continue;
+        const post = wall.find((entry) => entry.id === postId);
+        if (
+          post?.replies.some(
+            (reply) =>
+              reply.is_ai &&
+              reply.body.trim().toLowerCase() ===
+                optimistic.text.trim().toLowerCase()
+          )
+        ) {
+          next[postId] = null;
+          mutated = true;
+        }
+      }
+      return mutated ? next : current;
+    });
+  }, [wall]);
+
+  const togglePost = (id: string) => {
+    setExpanded((previous) => ({ ...previous, [id]: !previous[id] }));
+  };
+
+  const handleCreatePost = async (input: {
+    title: string;
+    body: string;
+    tags: string[];
+  }) => {
+    try {
+      await createPost(input);
+    } catch (error) {
+      throw wrapError(error, "Unable to post to the wall");
+    }
+  };
+
+  const handleReply = async (postId: string, body: string) => {
+    setReplyBusy((previous) => ({ ...previous, [postId]: true }));
+    try {
+      await createReply({ postId, body });
+    } catch (error) {
+      throw wrapError(error, "Unable to add reply");
+    } finally {
+      setReplyBusy((previous) => ({ ...previous, [postId]: false }));
+    }
+  };
+
+  const handleAskAI = async (postId: string) => {
+    setAiBusy((previous) => ({ ...previous, [postId]: true }));
+    setOptimisticReplies((previous) => ({
+      ...previous,
+      [postId]: { status: "thinking", text: "" },
+    }));
 
     try {
-      const trimmedTitle = title.trim();
-      const trimmedDetails = details.trim();
-
-      const { data: created, error } = await insertQuestion({
-        title: trimmedTitle,
-        details: trimmedDetails || undefined,
-      });
-
-      if (error || !created) {
-        throw new Error(error?.message ?? "Insert failed");
-      }
-
-      await fetch("/api/answer", {
+      const response = await fetch("/api/mentor", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: trimmedTitle,
-          details: trimmedDetails || undefined,
-        }),
+        body: JSON.stringify({ postId }),
       });
 
-      setTitle("");
-      setDetails("");
-      await load();
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Mentor request failed");
+      }
+
+      setOptimisticReplies((previous) => ({
+        ...previous,
+        [postId]: { status: "ready", text: payload.replyText },
+      }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to submit question";
-      setError(message);
+      setOptimisticReplies((previous) => ({ ...previous, [postId]: null }));
+      throw wrapError(error, "Mentor request failed");
     } finally {
-      setSubmitting(false);
+      setAiBusy((previous) => ({ ...previous, [postId]: false }));
     }
   };
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-2 text-2xl font-semibold">AI Mentor Wall (Prep)</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Environment-only mode: questions are stored; AI answering is disabled
-        until on-site setup.
-      </p>
+    <main className="mx-auto max-w-4xl space-y-6 p-6">
+      <header>
+        <p className="text-sm uppercase tracking-[0.2em] text-gray-500">
+          Lisbon AI Hackathon
+        </p>
+        <h1 className="mt-1 text-3xl font-semibold text-gray-900">
+          AI Mentor Wall
+        </h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Share blockers, watch teammate updates in real-time, and pull in the
+          AI mentor for actionable answers.
+        </p>
+      </header>
 
-      <div className="mb-4 space-y-2 rounded-xl border border-gray-200 p-4">
-        <input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          maxLength={200}
-          placeholder="Your question (≤ 200 chars)"
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-        />
-        <textarea
-          value={details}
-          onChange={(event) => setDetails(event.target.value)}
-          placeholder="More context (optional)"
-          className="min-h-[6rem] w-full rounded border border-gray-300 px-3 py-2 text-sm"
-        />
-        <button
-          onClick={ask}
-          disabled={submitting || !title.trim()}
-          className="rounded border border-gray-900 px-4 py-2 text-sm font-semibold disabled:opacity-60"
-        >
-          {submitting ? "Submitting" : "Ask AI"}
-        </button>
-      </div>
+      <AuthPanel session={session} />
 
-      {error && <div className="mb-2 text-sm text-red-600">{error}</div>}
+      {session ? (
+        <NewPostForm onCreate={handleCreatePost} />
+      ) : (
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-white/70 p-4 text-sm text-gray-600">
+          Sign in above to create posts and replies.
+        </div>
+      )}
 
-      <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200">
-        {items === null && (
-          <li className="px-4 py-6 text-center text-sm text-gray-500">
-            Loading questions...
-          </li>
-        )}
-        {items?.map((question) => (
-          <li key={question.id} className="space-y-1 px-4 py-3">
-            <div className="font-medium">{question.title}</div>
-            {question.details ? (
-              <div className="whitespace-pre-wrap text-sm text-gray-600">
-                {question.details}
-              </div>
-            ) : null}
-            <span className="text-xs text-gray-500">
-              Status: {question.status}
-            </span>
-          </li>
-        ))}
-        {items && items.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-gray-500">
-            No questions yet.
-          </li>
-        )}
-      </ul>
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="rounded-2xl border border-gray-200 bg-white/70 p-6 text-center text-sm text-gray-500 shadow-sm">
+          Loading wall…
+        </div>
+      ) : wall.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white/70 p-6 text-center text-sm text-gray-500 shadow-sm">
+          No posts yet. Be the first to ask for mentor help!
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {wall.map((post) => (
+            <PostThread
+              key={post.id}
+              post={post}
+              expanded={expanded[post.id] ?? false}
+              onToggle={togglePost}
+              onReply={handleReply}
+              onAskAI={handleAskAI}
+              replyBusy={replyBusy[post.id]}
+              aiBusy={aiBusy[post.id]}
+              optimisticReply={optimisticReplies[post.id]}
+              canReply={Boolean(session)}
+              currentUserId={session?.user?.id}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
+}
+
+function applyPostChange(
+  wall: WallPost[],
+  payload: {
+    eventType: string;
+    new: Record<string, any>;
+    old: Record<string, any>;
+  }
+) {
+  if (payload.eventType === "DELETE") {
+    return wall.filter((post) => post.id !== payload.old.id);
+  }
+
+  const incoming: WallPost = {
+    ...(payload.new as WallPost),
+    replies: wall.find((post) => post.id === payload.new.id)?.replies ?? [],
+  };
+
+  let next = wall.some((post) => post.id === incoming.id)
+    ? wall.map((post) => (post.id === incoming.id ? incoming : post))
+    : [incoming, ...wall];
+
+  next = next.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  return next;
+}
+
+function applyReplyChange(
+  wall: WallPost[],
+  payload: {
+    eventType: string;
+    new: Reply;
+    old: Reply;
+  }
+) {
+  if (payload.eventType === "DELETE") {
+    return wall.map((post) =>
+      post.id === payload.old.post_id
+        ? {
+            ...post,
+            replies: post.replies.filter((reply) => reply.id !== payload.old.id),
+          }
+        : post
+    );
+  }
+
+  const incoming = payload.new;
+
+  return wall.map((post) => {
+    if (post.id !== incoming.post_id) return post;
+
+    const replies = post.replies.some((reply) => reply.id === incoming.id)
+      ? post.replies.map((reply) =>
+          reply.id === incoming.id ? incoming : reply
+        )
+      : [...post.replies, incoming];
+
+    replies.sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    return { ...post, replies };
+  });
+}
+
+function wrapError(error: unknown, fallback: string) {
+  return error instanceof Error ? error : new Error(fallback);
 }

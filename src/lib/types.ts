@@ -1,16 +1,27 @@
-export type Question = {
+export type Profile = {
   id: string;
-  user_id: string | null;
+  username: string | null;
+  created_at: string | null;
+};
+
+export type Post = {
+  id: string;
+  author: string | null;
   title: string;
-  details: string | null;
-  status: "pending" | "answered" | "error";
+  body: string;
+  tags: string[] | null;
   created_at: string;
 };
 
-export type Answer = {
+export type Reply = {
   id: string;
-  question_id: string;
-  model: string;
-  content: string;
+  post_id: string;
+  author: string | null;
+  body: string;
+  is_ai: boolean;
   created_at: string;
+};
+
+export type WallPost = Post & {
+  replies: Reply[];
 };

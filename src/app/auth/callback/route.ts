@@ -1,7 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const fallbackSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+function resolveSiteUrl(request: NextRequest) {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL;
+  if (configured && /^https?:\/\//i.test(configured)) {
+    return configured;
+  }
 
-export async function GET() {
-  return NextResponse.redirect(new URL("/", fallbackSiteUrl));
+  if (configured && !/^https?:\/\//i.test(configured)) {
+    return `https://${configured}`;
+  }
+
+  return `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+}
+
+export async function GET(request: NextRequest) {
+  const siteUrl = resolveSiteUrl(request);
+  return NextResponse.redirect(new URL("/", siteUrl));
 }

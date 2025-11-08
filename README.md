@@ -17,7 +17,7 @@ Real-time teamwork board for weekend hackathons. Builders post blockers, teammat
 
 1. Create a GitHub OAuth app (Settings → Developer settings → OAuth Apps) with the callback URL `https://<your-supabase-project>.supabase.co/auth/v1/callback`.
 2. In Supabase Dashboard → Authentication → Providers → GitHub, enable the provider and paste the GitHub Client ID and Secret.
-3. Set `NEXT_PUBLIC_SITE_URL` in `.env.local` to the origin that serves your Next.js app (eg. `http://localhost:3000` in dev, your Vercel URL in prod).
+3. Set `NEXT_PUBLIC_SITE_URL` in `.env.local` to the origin that serves your Next.js app (include the protocol, e.g. `http://localhost:3000` in dev or `https://your-app.vercel.app` in prod).
 4. The new `/auth/callback` route will redirect back to `/`, so the GitHub button in the UI seamlessly hands control back to the wall once Supabase finishes the OAuth flow.
 
 ## Database schema & policies

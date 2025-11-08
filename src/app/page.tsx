@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import type {
+  RealtimePostgresChangesPayload,
+  Session,
+} from "@supabase/supabase-js";
 import AuthPanel from "@/components/auth-panel";
 import NewPostForm from "@/components/new-post-form";
 import PostThread, { OptimisticReply } from "@/components/post-thread";
@@ -253,42 +256,39 @@ export default function Home() {
 
 function applyPostChange(
   wall: WallPost[],
-  payload: {
-    eventType: string;
-    new: Record<string, any>;
-    old: Record<string, any>;
-  }
+  payload: RealtimePostgresChangesPayload<WallPost>
 ) {
-  if (payload.eventType === "DELETE") {
+  if (payload.eventType === "DELETE" && payload.old) {
     return wall.filter((post) => post.id !== payload.old.id);
   }
 
+  if (!payload.new) {
+    return wall;
+  }
+
+  const existingReplies =
+    wall.find((post) => post.id === payload.new?.id)?.replies ?? [];
+
   const incoming: WallPost = {
     ...(payload.new as WallPost),
-    replies: wall.find((post) => post.id === payload.new.id)?.replies ?? [],
+    replies: existingReplies,
   };
 
-  let next = wall.some((post) => post.id === incoming.id)
+  const next = wall.some((post) => post.id === incoming.id)
     ? wall.map((post) => (post.id === incoming.id ? incoming : post))
     : [incoming, ...wall];
 
-  next = next.sort(
+  return next.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
-
-  return next;
 }
 
 function applyReplyChange(
   wall: WallPost[],
-  payload: {
-    eventType: string;
-    new: Reply;
-    old: Reply;
-  }
+  payload: RealtimePostgresChangesPayload<Reply>
 ) {
-  if (payload.eventType === "DELETE") {
+  if (payload.eventType === "DELETE" && payload.old) {
     return wall.map((post) =>
       post.id === payload.old.post_id
         ? {
@@ -297,6 +297,10 @@ function applyReplyChange(
           }
         : post
     );
+  }
+
+  if (!payload.new) {
+    return wall;
   }
 
   const incoming = payload.new;
@@ -311,7 +315,8 @@ function applyReplyChange(
       : [...post.replies, incoming];
 
     replies.sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
     return { ...post, replies };

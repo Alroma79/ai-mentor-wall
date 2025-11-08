@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import AuthPanel from "@/components/auth-panel";
 import NewPostForm from "@/components/new-post-form";
@@ -22,6 +22,7 @@ export default function Home() {
   const [optimisticReplies, setOptimisticReplies] = useState<
     Record<string, OptimisticReply | null>
   >({});
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const syncSession = async () => {
@@ -109,6 +110,17 @@ export default function Home() {
     });
   }, [wall]);
 
+  const visibleWall = useMemo(() => {
+    if (!search.trim()) return wall;
+    const query = search.trim().toLowerCase();
+    return wall.filter(
+      (post) =>
+        post.title.toLowerCase().includes(query) ||
+        post.body.toLowerCase().includes(query) ||
+        (post.tags ?? []).some((tag) => tag.toLowerCase().includes(query))
+    );
+  }, [wall, search]);
+
   const togglePost = (id: string) => {
     setExpanded((previous) => ({ ...previous, [id]: !previous[id] }));
   };
@@ -193,6 +205,15 @@ export default function Home() {
         </div>
       )}
 
+      <div className="rounded-2xl border border-gray-200 bg-white/70 p-3 shadow-sm">
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search posts by title, body, or tags"
+          className="w-full rounded-full border border-gray-200 px-4 py-2 text-sm focus:border-gray-900 focus:outline-none"
+        />
+      </div>
+
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
@@ -203,13 +224,13 @@ export default function Home() {
         <div className="rounded-2xl border border-gray-200 bg-white/70 p-6 text-center text-sm text-gray-500 shadow-sm">
           Loading wall…
         </div>
-      ) : wall.length === 0 ? (
+      ) : visibleWall.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white/70 p-6 text-center text-sm text-gray-500 shadow-sm">
           No posts yet. Be the first to ask for mentor help!
         </div>
       ) : (
         <div className="space-y-4">
-          {wall.map((post) => (
+          {visibleWall.map((post) => (
             <PostThread
               key={post.id}
               post={post}

@@ -26,6 +26,9 @@ export default function Home() {
     Record<string, OptimisticReply | null>
   >({});
   const [search, setSearch] = useState("");
+  const [toasts, setToasts] = useState<
+    { id: string; message: string; action?: () => void }[]
+  >([]);
 
   useEffect(() => {
     const syncSession = async () => {
@@ -177,7 +180,17 @@ export default function Home() {
       }));
     } catch (error) {
       setOptimisticReplies((previous) => ({ ...previous, [postId]: null }));
-      throw wrapError(error, "Mentor request failed");
+      const wrapped = wrapError(error, "Mentor request failed");
+      setToasts((current) => [
+        ...current,
+        {
+          id: `${postId}-${Date.now()}`,
+          message: wrapped.message,
+          action: () => {
+            void handleAskAI(postId, prompt);
+          },
+        },
+      ]);
     } finally {
       setAiBusy((previous) => ({ ...previous, [postId]: false }));
     }
@@ -250,6 +263,41 @@ export default function Home() {
           ))}
         </div>
       )}
+
+      <div className="fixed bottom-4 right-4 space-y-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="flex items-start gap-3 rounded-2xl border border-red-200 bg-white/95 px-4 py-3 text-sm text-red-700 shadow-lg"
+          >
+            <span className="flex-1">{toast.message}</span>
+            {toast.action && (
+              <button
+                onClick={() => {
+                  setToasts((current) =>
+                    current.filter((item) => item.id !== toast.id)
+                  );
+                  toast.action?.();
+                }}
+                className="rounded-full border border-red-600 px-3 py-1 text-xs font-semibold text-red-700"
+              >
+                Try again
+              </button>
+            )}
+            <button
+              onClick={() =>
+                setToasts((current) =>
+                  current.filter((item) => item.id !== toast.id)
+                )
+              }
+              className="text-xs text-gray-500"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
     </main>
   );
 }

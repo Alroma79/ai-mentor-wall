@@ -47,6 +47,9 @@ Real-time teamwork board for weekend hackathons. Builders post blockers, teammat
   - Body: `{ postId: string, prompt?: string }`
   - Response: `{ replyText: string }`
   - Persists the reply inside `replies` with `is_ai = true`.
+- `GET /api/health`
+  - Response: `{ ok: true, time: "<ISO timestamp>" }`
+  - Used for Railway health checks / uptime probes.
 
 ## Screenshots (placeholders)
 

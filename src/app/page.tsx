@@ -254,25 +254,26 @@ export default function Home() {
   );
 }
 
-function applyPostChange(
-  wall: WallPost[],
-  payload: RealtimePostgresChangesPayload<WallPost>
-) {
+type RawPayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
+
+function applyPostChange(wall: WallPost[], payload: RawPayload) {
   if (payload.eventType === "DELETE" && payload.old) {
-    return wall.filter((post) => post.id !== payload.old.id);
+    const removedId = (payload.old as { id?: string }).id;
+    return removedId ? wall.filter((post) => post.id !== removedId) : wall;
   }
 
-  if (!payload.new) {
+  const rawNew = payload.new as Partial<WallPost> | null;
+  if (!rawNew?.id) {
     return wall;
   }
 
   const existingReplies =
-    wall.find((post) => post.id === payload.new?.id)?.replies ?? [];
+    wall.find((post) => post.id === rawNew.id)?.replies ?? [];
 
   const incoming: WallPost = {
-    ...(payload.new as WallPost),
     replies: existingReplies,
-  };
+    ...rawNew,
+  } as WallPost;
 
   const next = wall.some((post) => post.id === incoming.id)
     ? wall.map((post) => (post.id === incoming.id ? incoming : post))
@@ -284,26 +285,29 @@ function applyPostChange(
   );
 }
 
-function applyReplyChange(
-  wall: WallPost[],
-  payload: RealtimePostgresChangesPayload<Reply>
-) {
+function applyReplyChange(wall: WallPost[], payload: RawPayload) {
   if (payload.eventType === "DELETE" && payload.old) {
+    const oldData = payload.old as Partial<Reply>;
+    if (!oldData?.post_id || !oldData?.id) {
+      return wall;
+    }
+
     return wall.map((post) =>
-      post.id === payload.old.post_id
+      post.id === oldData.post_id
         ? {
             ...post,
-            replies: post.replies.filter((reply) => reply.id !== payload.old.id),
+            replies: post.replies.filter((reply) => reply.id !== oldData.id),
           }
         : post
     );
   }
 
-  if (!payload.new) {
+  const rawNew = payload.new as Partial<Reply> | null;
+  if (!rawNew?.post_id || !rawNew?.id) {
     return wall;
   }
 
-  const incoming = payload.new;
+  const incoming = rawNew as Reply;
 
   return wall.map((post) => {
     if (post.id !== incoming.post_id) return post;

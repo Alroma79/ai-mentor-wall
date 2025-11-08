@@ -6,15 +6,10 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const openAiKey = process.env.OPENAI_API_KEY;
 
-if (!url || !anonKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const serverClient =
-  supabaseAdmin ??
-  createClient(url, anonKey, {
-    auth: { persistSession: false },
-  });
+const fallbackClient =
+  !supabaseAdmin && url && anonKey
+    ? createClient(url, anonKey, { auth: { persistSession: false } })
+    : null;
 
 const SYSTEM_PROMPT =
   "You are the AI mentor for a hackathon wall. Respond with short, actionable advice and numbered steps when helpful. Keep it under 6 sentences.";
@@ -23,6 +18,14 @@ export async function POST(request: Request) {
   if (!openAiKey) {
     return NextResponse.json(
       { error: "OPENAI_API_KEY is not configured." },
+      { status: 500 }
+    );
+  }
+
+  const serverClient = supabaseAdmin ?? fallbackClient;
+  if (!serverClient) {
+    return NextResponse.json(
+      { error: "Supabase environment variables are not configured." },
       { status: 500 }
     );
   }

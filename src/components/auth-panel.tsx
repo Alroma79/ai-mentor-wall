@@ -54,12 +54,6 @@ export default function AuthPanel({ session }: AuthPanelProps) {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "github",
-        options: {
-          redirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/auth/callback`
-              : undefined,
-        },
       });
 
       if (error) {

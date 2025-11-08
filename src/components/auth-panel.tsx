@@ -12,6 +12,7 @@ export default function AuthPanel({ session }: AuthPanelProps) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
 
   const sendMagicLink = async () => {
     if (!email.trim()) {
@@ -46,6 +47,33 @@ export default function AuthPanel({ session }: AuthPanelProps) {
     }
   };
 
+  const signInWithGitHub = async () => {
+    setStatus(null);
+    setOauthLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: {
+          redirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/auth/callback`
+              : undefined,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "GitHub sign-in failed";
+      setStatus(message);
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -74,6 +102,13 @@ export default function AuthPanel({ session }: AuthPanelProps) {
       <p className="mb-3 text-sm text-gray-600">
         Sign in with a magic link to post questions and chat with the mentor.
       </p>
+      <button
+        onClick={signInWithGitHub}
+        disabled={oauthLoading}
+        className="mb-4 w-full rounded-full border border-gray-900 px-4 py-2 text-sm font-semibold disabled:opacity-60 sm:w-auto"
+      >
+        {oauthLoading ? "Connecting…" : "Sign in with GitHub"}
+      </button>
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="email"

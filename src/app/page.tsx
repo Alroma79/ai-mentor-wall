@@ -1,65 +1,130 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import { insertQuestion, listQuestions } from "@/lib/db";
+
+type QuestionItem =
+  Awaited<ReturnType<typeof listQuestions>>["data"] extends (infer U)[] | null
+    ? U
+    : never;
 
 export default function Home() {
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [items, setItems] = useState<QuestionItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = async () => {
+    const { data, error } = await listQuestions();
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setItems(data);
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const ask = async () => {
+    if (!title.trim()) return;
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const trimmedTitle = title.trim();
+      const trimmedDetails = details.trim();
+
+      const { data: created, error } = await insertQuestion({
+        title: trimmedTitle,
+        details: trimmedDetails || undefined,
+      });
+
+      if (error || !created) {
+        throw new Error(error?.message ?? "Insert failed");
+      }
+
+      await fetch("/api/answer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: trimmedTitle,
+          details: trimmedDetails || undefined,
+        }),
+      });
+
+      setTitle("");
+      setDetails("");
+      await load();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to submit question";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="mx-auto max-w-3xl p-6">
+      <h1 className="mb-2 text-2xl font-semibold">AI Mentor Wall (Prep)</h1>
+      <p className="mb-6 text-sm text-gray-600">
+        Environment-only mode: questions are stored; AI answering is disabled
+        until on-site setup.
+      </p>
+
+      <div className="mb-4 space-y-2 rounded-xl border border-gray-200 p-4">
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          maxLength={200}
+          placeholder="Your question (≤ 200 chars)"
+          className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <textarea
+          value={details}
+          onChange={(event) => setDetails(event.target.value)}
+          placeholder="More context (optional)"
+          className="min-h-[6rem] w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        />
+        <button
+          onClick={ask}
+          disabled={submitting || !title.trim()}
+          className="rounded border border-gray-900 px-4 py-2 text-sm font-semibold disabled:opacity-60"
+        >
+          {submitting ? "Submitting" : "Ask AI"}
+        </button>
+      </div>
+
+      {error && <div className="mb-2 text-sm text-red-600">{error}</div>}
+
+      <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200">
+        {items === null && (
+          <li className="px-4 py-6 text-center text-sm text-gray-500">
+            Loading questions...
+          </li>
+        )}
+        {items?.map((question) => (
+          <li key={question.id} className="space-y-1 px-4 py-3">
+            <div className="font-medium">{question.title}</div>
+            {question.details ? (
+              <div className="whitespace-pre-wrap text-sm text-gray-600">
+                {question.details}
+              </div>
+            ) : null}
+            <span className="text-xs text-gray-500">
+              Status: {question.status}
+            </span>
+          </li>
+        ))}
+        {items && items.length === 0 && (
+          <li className="px-4 py-6 text-center text-sm text-gray-500">
+            No questions yet.
+          </li>
+        )}
+      </ul>
+    </main>
   );
 }

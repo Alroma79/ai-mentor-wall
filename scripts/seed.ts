@@ -1,4 +1,8 @@
+import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+loadEnv({ path: ".env.local" });
+loadEnv();
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

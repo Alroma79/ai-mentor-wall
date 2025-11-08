@@ -136,7 +136,7 @@ export default function Home() {
     }
   };
 
-  const handleAskAI = async (postId: string) => {
+  const handleAskAI = async (postId: string, prompt?: string) => {
     setAiBusy((previous) => ({ ...previous, [postId]: true }));
     setOptimisticReplies((previous) => ({
       ...previous,
@@ -147,7 +147,7 @@ export default function Home() {
       const response = await fetch("/api/mentor", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ postId }),
+        body: JSON.stringify({ postId, prompt }),
       });
 
       const payload = await response.json();

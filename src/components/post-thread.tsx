@@ -14,7 +14,7 @@ type PostThreadProps = {
   expanded: boolean;
   onToggle: (id: string) => void;
   onReply: (postId: string, body: string) => Promise<void>;
-  onAskAI: (postId: string) => Promise<void>;
+  onAskAI: (postId: string, prompt?: string) => Promise<void>;
   replyBusy?: boolean;
   aiBusy?: boolean;
   optimisticReply?: OptimisticReply | null;
@@ -37,6 +37,7 @@ export default function PostThread({
   const [replyValue, setReplyValue] = useState("");
   const [replyError, setReplyError] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [mentorPrompt, setMentorPrompt] = useState("");
 
   const replies = useMemo(() => post.replies ?? [], [post.replies]);
 
@@ -60,7 +61,10 @@ export default function PostThread({
   const triggerMentor = async () => {
     setAiError(null);
     try {
-      await onAskAI(post.id);
+      await onAskAI(post.id, mentorPrompt.trim() || undefined);
+      if (mentorPrompt.trim()) {
+        setMentorPrompt("");
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Mentor request failed";
@@ -145,6 +149,12 @@ export default function PostThread({
               {replyError && (
                 <p className="text-sm text-red-600">{replyError}</p>
               )}
+              <input
+                value={mentorPrompt}
+                onChange={(event) => setMentorPrompt(event.target.value)}
+                placeholder="Extra context just for the AI mentor (optional)"
+                className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              />
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={submitReply}

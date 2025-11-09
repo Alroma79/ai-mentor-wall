@@ -6,6 +6,17 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const openAiKey = process.env.OPENAI_API_KEY;
 
+const lastHits = new Map<string, number>();
+const WINDOW_MS = 5_000;
+
+function throttled(userId: string) {
+  const now = Date.now();
+  const last = lastHits.get(userId) ?? 0;
+  if (now - last < WINDOW_MS) return true;
+  lastHits.set(userId, now);
+  return false;
+}
+
 const fallbackClient =
   !supabaseAdmin && url && anonKey
     ? createClient(url, anonKey, { auth: { persistSession: false } })
@@ -31,6 +42,36 @@ export async function POST(request: Request) {
   }
 
   try {
+    const authHeader = request.headers.get("authorization");
+    const token =
+      authHeader?.startsWith("Bearer ") && authHeader.length > 7
+        ? authHeader.slice(7)
+        : null;
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: userData, error: userError } = await serverClient.auth.getUser(
+      token
+    );
+
+    if (userError || !userData?.user) {
+      return NextResponse.json(
+        { error: userError?.message ?? "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const user = userData.user;
+
+    if (throttled(user.id)) {
+      return NextResponse.json(
+        { error: "Please wait a few seconds." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const postId: string | undefined = body.postId;
     const userPrompt: string | undefined = body.prompt;

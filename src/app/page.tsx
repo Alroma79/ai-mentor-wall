@@ -162,9 +162,14 @@ export default function Home() {
     }));
 
     try {
+      const headers: HeadersInit = { "content-type": "application/json" };
+      if (session?.access_token) {
+        headers.authorization = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch("/api/mentor", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers,
         body: JSON.stringify({ postId, prompt }),
       });
 

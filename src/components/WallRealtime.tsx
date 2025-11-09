@@ -36,11 +36,11 @@ export default function WallRealtime({ initialPosts }: { initialPosts: Post[] })
   }, []);
 
   return (
-    <div className="space-y-3">
+    <div className="max-w-3xl mx-auto p-4 space-y-3">
       {posts.map((p) => (
         <article key={p.id} className="rounded-xl border p-3">
           <h3 className="font-semibold">{p.title}</h3>
-          <p className="text-sm opacity-80 whitespace-pre-wrap">{p.body}</p>
+          <p className="whitespace-pre-wrap text-sm opacity-80">{p.body}</p>
         </article>
       ))}
     </div>

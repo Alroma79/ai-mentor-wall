@@ -74,7 +74,9 @@ export default function Home() {
           setWall((previous) => applyPostChange(previous, payload));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[posts channel]", status);
+      });
 
     const repliesChannel = supabase
       .channel("public:replies")
@@ -85,7 +87,9 @@ export default function Home() {
           setWall((previous) => applyReplyChange(previous, payload));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[replies channel]", status);
+      });
 
     return () => {
       supabase.removeChannel(postsChannel);

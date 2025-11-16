@@ -1,9 +1,29 @@
 "use client";
 
+import Link from "next/link";
+import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type ChannelStatus = "connecting" | "subscribed" | "error" | "closed";
+
+const mapRealtimeStatus = (status: REALTIME_SUBSCRIBE_STATES): ChannelStatus => {
+  switch (status) {
+    case REALTIME_SUBSCRIBE_STATES.SUBSCRIBED:
+      return "subscribed";
+    case REALTIME_SUBSCRIBE_STATES.CLOSED:
+      return "closed";
+    case REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR:
+    case REALTIME_SUBSCRIBE_STATES.TIMED_OUT:
+      return "error";
+    default:
+      return "connecting";
+  }
+};
+
+const isErrorStatus = (status: REALTIME_SUBSCRIBE_STATES) =>
+  status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR ||
+  status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT;
 
 export default function DebugRealtimePage() {
   const [postsStatus, setPostsStatus] = useState<ChannelStatus>("connecting");
@@ -13,7 +33,7 @@ export default function DebugRealtimePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("🔌 Setting up realtime channels...");
+    console.log("рџ”Њ Setting up realtime channels...");
 
     const postsChannel = supabase
       .channel("debug:posts")
@@ -23,14 +43,14 @@ export default function DebugRealtimePage() {
         (payload) => {
           const timestamp = new Date().toLocaleTimeString();
           const message = `[${timestamp}] ${payload.eventType}: ${JSON.stringify(payload.new || payload.old)}`;
-          console.log("📬 Posts event:", message);
+          console.log("рџ“¬ Posts event:", message);
           setPostsEvents((prev) => [message, ...prev].slice(0, 10));
         }
       )
       .subscribe((status) => {
-        console.log("📡 Posts channel status:", status);
-        setPostsStatus(status as ChannelStatus);
-        if (status === "CHANNEL_ERROR") {
+        console.log("рџ“Ў Posts channel status:", status);
+        setPostsStatus(mapRealtimeStatus(status));
+        if (isErrorStatus(status)) {
           setError("Posts channel failed to subscribe. Check Supabase replication settings.");
         }
       });
@@ -43,20 +63,20 @@ export default function DebugRealtimePage() {
         (payload) => {
           const timestamp = new Date().toLocaleTimeString();
           const message = `[${timestamp}] ${payload.eventType}: ${JSON.stringify(payload.new || payload.old)}`;
-          console.log("📬 Replies event:", message);
+          console.log("рџ“¬ Replies event:", message);
           setRepliesEvents((prev) => [message, ...prev].slice(0, 10));
         }
       )
       .subscribe((status) => {
-        console.log("📡 Replies channel status:", status);
-        setRepliesStatus(status as ChannelStatus);
-        if (status === "CHANNEL_ERROR") {
+        console.log("рџ“Ў Replies channel status:", status);
+        setRepliesStatus(mapRealtimeStatus(status));
+        if (isErrorStatus(status)) {
           setError("Replies channel failed to subscribe. Check Supabase replication settings.");
         }
       });
 
     return () => {
-      console.log("🔌 Cleaning up channels...");
+      console.log("рџ”Њ Cleaning up channels...");
       supabase.removeChannel(postsChannel);
       supabase.removeChannel(repliesChannel);
     };
@@ -80,15 +100,15 @@ export default function DebugRealtimePage() {
   const getStatusIcon = (status: ChannelStatus) => {
     switch (status) {
       case "subscribed":
-        return "✅";
+        return "вњ…";
       case "connecting":
-        return "⏳";
+        return "вЏі";
       case "error":
-        return "❌";
+        return "вќЊ";
       case "closed":
-        return "🔌";
+        return "рџ”Њ";
       default:
-        return "❓";
+        return "вќ“";
     }
   };
 
@@ -96,13 +116,13 @@ export default function DebugRealtimePage() {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-4xl">
         <h1 className="mb-8 text-3xl font-bold text-gray-900">
-          🔍 Realtime Debug Dashboard
+          рџ”Ќ Realtime Debug Dashboard
         </h1>
 
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
             <p className="text-sm text-red-800">
-              <strong>⚠️ Error:</strong> {error}
+              <strong>вљ пёЏ Error:</strong> {error}
             </p>
             <p className="mt-2 text-xs text-red-600">
               Check the guide in <code>REALTIME_FIX_GUIDE.md</code> for solutions.
@@ -200,7 +220,7 @@ export default function DebugRealtimePage() {
         {/* Instructions */}
         <div className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-6">
           <h3 className="mb-3 text-sm font-semibold text-blue-900">
-            📋 How to Test
+            рџ“‹ How to Test
           </h3>
           <ol className="space-y-2 text-sm text-blue-800">
             <li>
@@ -208,15 +228,15 @@ export default function DebugRealtimePage() {
             </li>
             <li>
               2. Open your main app in another tab:{" "}
-              <a href="/" className="underline">
+              <Link href="/" className="underline">
                 /
-              </a>
+              </Link>
             </li>
             <li>3. Create a new post or add a reply</li>
             <li>4. Watch the events appear here in real-time!</li>
           </ol>
           <p className="mt-4 text-xs text-blue-700">
-            💡 If status shows "error" or "connecting" for more than 5 seconds,
+            рџ’Ў If status shows &quot;error&quot; or &quot;connecting&quot; for more than 5 seconds,
             check <code>REALTIME_FIX_GUIDE.md</code>
           </p>
         </div>
@@ -241,4 +261,5 @@ export default function DebugRealtimePage() {
     </div>
   );
 }
+
 

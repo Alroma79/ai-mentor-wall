@@ -5,16 +5,20 @@ import * as path from "path";
 
 dotenv.config({ path: ".env.local" });
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+function requireEnv(name: string) {
+  const value = process.env[name];
 
-if (!url || !serviceKey) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local"
-  );
+  if (!value) {
+    throw new Error(`Missing ${name} in .env.local`);
+  }
+
+  return value;
 }
 
-const supabase = createClient(url, serviceKey, {
+const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false },
 });
 
@@ -42,7 +46,12 @@ async function applyRealtimeFix() {
 
   console.log("⚠️  To apply this migration, you have two options:\n");
   console.log("Option 1: Use Supabase Dashboard SQL Editor");
-  console.log(`  1. Go to: ${url.replace("https://", "https://supabase.com/dashboard/project/")}/sql/new`);
+  console.log(
+    `  1. Go to: ${supabaseUrl.replace(
+      "https://",
+      "https://supabase.com/dashboard/project/"
+    )}/sql/new`
+  );
   console.log("  2. Copy the SQL from: supabase/migrations/20250109000000_fix_realtime.sql");
   console.log("  3. Paste and run it\n");
 
@@ -50,7 +59,12 @@ async function applyRealtimeFix() {
   console.log("  npx supabase db push\n");
 
   console.log("Option 3: Manual check in Dashboard");
-  console.log(`  1. Go to: ${url.replace("https://", "https://supabase.com/dashboard/project/")}/database/replication`);
+  console.log(
+    `  1. Go to: ${supabaseUrl.replace(
+      "https://",
+      "https://supabase.com/dashboard/project/"
+    )}/database/replication`
+  );
   console.log("  2. Ensure 'posts' and 'replies' tables have replication enabled");
   console.log("  3. Look for the toggle switches next to each table\n");
 
